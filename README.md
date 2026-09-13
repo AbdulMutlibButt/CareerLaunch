@@ -47,8 +47,8 @@ MongoDB mode starts with an empty database. Create accounts through the UI, or d
 ## Architecture
 
 ```text
-Browser → Next.js pages + Axios → same-origin /api proxy → Express → MongoDB
-                                                               ↘ local JSON demo
+Browser → Vercel Next.js + Axios → same-origin /api rewrite → Render Express → MongoDB
+                                                                         ↘ local JSON demo (development only)
 ```
 
 `client/components/CareerLaunch.jsx` implements the screens and routes. `server/src/app.js` implements the API and its security boundaries. `server/src/store.js` defines the five MongoDB models and the local demo adapter. The frontend's navigation is not an authorization boundary: all protected API operations verify the session, role and ownership.
@@ -80,16 +80,51 @@ Import `postman/CareerLaunch.postman_collection.json`. The default base URL is `
 
 ```sh
 npm test
-npm run build
+API_URL=https://api.example.com npm run build
 ```
 
-The integration tests cover the hiring flow, authorization, forged ownership fields, duplicate applications/saves, status transition rules, closed/deleted listings, origin rejection, logout, protected production cookies, environment validation, password-hash minimization and persistent local storage. MongoDB connectivity can be verified with a read-only administrative ping before starting the application.
+The build command above uses a safe public placeholder because production compilation intentionally requires `API_URL`; replace it with the Render origin for a deployment build. In PowerShell, set `$env:API_URL` first and then run `npm run build`. The integration tests cover the hiring flow, authorization, forged ownership fields, duplicate applications/saves, status transition rules, closed/deleted listings, origin rejection, logout, protected production cookies, environment validation, password-hash minimization, persistent local storage and the Vercel/Render deployment boundaries. MongoDB connectivity can be verified with a read-only administrative ping before starting the application.
 
-## Production setup
+## Vercel frontend and Render backend
 
-This project uses a conventional Node.js backend with the native MongoDB driver. It is not a Cloudflare Workers/Sites deployment. Run both Node services behind an HTTPS reverse proxy (or deploy the frontend and API to compatible Node hosts). Set `API_URL` for the Next.js proxy before building, and set `MONGODB_URI`, a strong `JWT_SECRET`, `NODE_ENV=production` and an HTTPS `APP_ORIGIN` on the API. The API intentionally refuses production startup without these settings. It listens on loopback by default, suitable for a same-host reverse proxy; configure `HOST=0.0.0.0` only for a container host that requires it. Never publish the demo accounts with real user data.
+The production architecture keeps the existing Next.js frontend on Vercel and runs the persistent Express API as a Render web service. Browser requests remain same-origin at `/api/*`; Next.js rewrites them server-side to the public Render origin.
 
-Build with `npm run build`, then run `npm run start -w server` and `npm run start -w client` under your process manager. Host availability and free-tier limits must be checked when selecting deployment providers. No live deployment or database account is included.
+### Why `/api/health` failed on Vercel
+
+The previous Next.js configuration used `http://127.0.0.1:4000` whenever `API_URL` was absent. In Vercel production that loopback address is inside the Vercel runtime, not the CareerLaunch backend. Vercel blocks external rewrites whose destination resolves to a private address and returns `DNS_HOSTNAME_RESOLVED_PRIVATE`. Production builds now require `API_URL`, require HTTPS, and reject local, private, credential-bearing or path-bearing destinations.
+
+### 1. Create the Render API
+
+[`render.yaml`](render.yaml) is a safe Blueprint for the backend. Automatic deploys are disabled until you deliberately enable them. It installs only the server workspace, starts the Express service, and checks `/api/health`.
+
+Configure these Render variables during Blueprint creation:
+
+| Variable | Configuration |
+| --- | --- |
+| `NODE_ENV` | `production` (declared in the Blueprint) |
+| `HOST` | `0.0.0.0` (declared in the Blueprint) |
+| `PORT` | `10000` (declared in the Blueprint; the server reads `PORT`) |
+| `APP_ORIGIN` | Exact public Vercel frontend origin, using HTTPS and no trailing path |
+| `MONGODB_URI` | MongoDB connection string, entered only in Render's secret prompt |
+| `JWT_SECRET` | Generated securely by Render from the Blueprint |
+
+Keep MongoDB network access restricted to the backend wherever your hosting plan permits. Do not seed demo users in production. After the service starts, verify its public `https://<service>.onrender.com/api/health` endpoint before changing Vercel.
+
+### 2. Point Vercel at Render
+
+Keep the Vercel project Root Directory set to `client`. Add this server-side environment variable to the Vercel Production environment:
+
+```env
+API_URL=https://<service>.onrender.com
+```
+
+Use the public Render HTTPS origin only: do not include `/api`, credentials, a query string, localhost, a private IP or a Render private-network hostname. `API_URL` intentionally does not use the `NEXT_PUBLIC_` prefix because it is consumed by Next.js server configuration and does not need to be bundled into browser JavaScript.
+
+Vercel applies environment changes only to new deployments. After saving `API_URL`, create a new deployment and verify the Vercel `/api/health` route. If Preview deployments also use the Render API, their browser origins must be accounted for by the backend's origin policy; the default production configuration permits only the exact `APP_ORIGIN`.
+
+### Other Node hosting
+
+For a same-host reverse proxy, set `API_URL` to the backend origin before running `npm run build`, then run `npm run start -w server` and `npm run start -w client` under a process manager. The API defaults to loopback for local and same-host operation; public container platforms must bind it to `0.0.0.0` and their assigned `PORT`.
 
 ## Known limits and future improvements
 

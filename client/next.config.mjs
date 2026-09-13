@@ -1,8 +1,6 @@
+import { resolveApiOrigin } from "./lib/api-origin.mjs";
 const production = process.env.NODE_ENV === "production";
-const apiUrl = process.env.API_URL || "http://127.0.0.1:4000";
-const parsedApiUrl = new URL(apiUrl);
-if (!["http:", "https:"].includes(parsedApiUrl.protocol))
-  throw new Error("API_URL must use HTTP or HTTPS.");
+const apiOrigin = resolveApiOrigin({ production });
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -41,7 +39,7 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${parsedApiUrl.origin}/api/:path*`,
+        destination: `${apiOrigin}/api/:path*`,
       },
     ];
   },
