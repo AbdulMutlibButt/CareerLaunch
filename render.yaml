@@ -2,6 +2,7 @@ services:
   - type: web
     name: careerlaunch-api
     runtime: node
+    plan: free
     autoDeployTrigger: "off"
     buildCommand: npm ci --omit=dev --workspace server
     startCommand: npm run start --workspace server

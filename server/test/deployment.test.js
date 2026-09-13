@@ -35,6 +35,7 @@ test("the Render Blueprint binds publicly and keeps secrets out of source", asyn
     new URL("../../render.yaml", import.meta.url),
     "utf8",
   );
+  assert.match(blueprint, /name: careerlaunch-api\s+runtime: node\s+plan: free/);
   assert.match(blueprint, /autoDeployTrigger: "off"/);
   assert.match(blueprint, /healthCheckPath: \/api\/health/);
   assert.match(blueprint, /key: HOST\s+value: "0\.0\.0\.0"/);
