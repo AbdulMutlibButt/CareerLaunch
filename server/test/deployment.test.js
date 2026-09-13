@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolveApiOrigin } from "../../client/lib/api-origin.mjs";
 import { connectMongo } from "../src/store.js";
 import { startLocalServer } from "../src/listener.js";
@@ -55,6 +55,26 @@ test("the Vercel entry exports Express without starting a listener", async () =>
   );
   assert.equal(server, null);
   assert.equal(listenCalls, 0);
+});
+
+test("src/index.js is the only Vercel-recognized Express entry", async () => {
+  const extensions = new Set(["js", "cjs", "mjs", "ts", "cts", "mts"]);
+  const stems = new Set(["app", "index", "server"]);
+  const roots = [
+    ["", new URL("../", import.meta.url)],
+    ["src/", new URL("../src/", import.meta.url)],
+  ];
+  const entries = [];
+  for (const [prefix, directory] of roots)
+    for (const item of await readdir(directory, { withFileTypes: true })) {
+      if (!item.isFile()) continue;
+      const separator = item.name.lastIndexOf(".");
+      const stem = separator < 0 ? item.name : item.name.slice(0, separator);
+      const extension = separator < 0 ? "" : item.name.slice(separator + 1);
+      if (stems.has(stem) && extensions.has(extension))
+        entries.push(`${prefix}${item.name}`);
+    }
+  assert.deepEqual(entries.sort(), ["src/index.js"]);
 });
 
 test("MongoDB connections are reused and failed connections can retry", async () => {

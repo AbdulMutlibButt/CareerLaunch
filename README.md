@@ -51,7 +51,7 @@ Browser → Vercel Next.js + Axios → same-origin /api rewrite → Vercel Expre
                                                                          ↘ local JSON demo (development only)
 ```
 
-`client/components/CareerLaunch.jsx` implements the screens and routes. `server/src/app.js` implements the API and its security boundaries. `server/src/store.js` defines the five MongoDB models and the local demo adapter. The frontend's navigation is not an authorization boundary: all protected API operations verify the session, role and ownership.
+`client/components/CareerLaunch.jsx` implements the screens and routes. `server/src/create-app.js` implements the API and its security boundaries. `server/src/store.js` defines the five MongoDB models and the local demo adapter. The frontend's navigation is not an authorization boundary: all protected API operations verify the session, role and ownership.
 
 The model collections are users, profiles (applicant/company fields), jobs, applications and saved jobs. Profiles reference users; jobs reference employers; applications reference jobs and applicants; saved jobs reference users and jobs. MongoDB uses UUID strings as IDs. Password hashes are excluded from normal store reads and can only be requested through the authentication-specific secret read. Soft deletion preserves application history.
 

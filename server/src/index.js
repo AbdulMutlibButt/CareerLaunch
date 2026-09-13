@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { createStore } from "./store.js";
-import { createApp } from "./app.js";
+import { createApp } from "./create-app.js";
 import { seedDemo } from "./demo.js";
 import { loadConfig } from "./config.js";
 import { isVercelRuntime, startLocalServer } from "./listener.js";
