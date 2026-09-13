@@ -47,7 +47,7 @@ MongoDB mode starts with an empty database. Create accounts through the UI, or d
 ## Architecture
 
 ```text
-Browser → Vercel Next.js + Axios → same-origin /api rewrite → Render Express → MongoDB
+Browser → Vercel Next.js + Axios → same-origin /api rewrite → Vercel Express → MongoDB
                                                                          ↘ local JSON demo (development only)
 ```
 
@@ -83,44 +83,44 @@ npm test
 API_URL=https://api.example.com npm run build
 ```
 
-The build command above uses a safe public placeholder because production compilation intentionally requires `API_URL`; replace it with the Render origin for a deployment build. In PowerShell, set `$env:API_URL` first and then run `npm run build`. The integration tests cover the hiring flow, authorization, forged ownership fields, duplicate applications/saves, status transition rules, closed/deleted listings, origin rejection, logout, protected production cookies, environment validation, password-hash minimization, persistent local storage and the Vercel/Render deployment boundaries. MongoDB connectivity can be verified with a read-only administrative ping before starting the application.
+The build command above uses a safe public placeholder because production compilation intentionally requires `API_URL`; replace it with the backend Vercel origin for a deployment build. In PowerShell, set `$env:API_URL` first and then run `npm run build`. The integration tests cover the hiring flow, authorization, forged ownership fields, duplicate applications/saves, status transition rules, closed/deleted listings, origin rejection, logout, protected production cookies, environment validation, password-hash minimization, persistent local storage and the two-project Vercel deployment boundaries. MongoDB connectivity can be verified with a read-only administrative ping before starting the application.
 
-## Vercel frontend and Render backend
+## Separate Vercel frontend and backend
 
-The production architecture keeps the existing Next.js frontend on Vercel and runs the persistent Express API as a Render web service. Browser requests remain same-origin at `/api/*`; Next.js rewrites them server-side to the public Render origin.
+CareerLaunch uses two Vercel Hobby projects from the same GitHub repository: the existing Next.js frontend with `client` as its Root Directory, and a separate Express backend with `server` as its Root Directory. Browser requests remain same-origin at `/api/*`; Next.js rewrites them server-side to the backend project's public HTTPS origin. This preserves the host-only secure JWT cookie and avoids browser cross-origin credential handling.
 
 ### Why `/api/health` failed on Vercel
 
 The previous Next.js configuration used `http://127.0.0.1:4000` whenever `API_URL` was absent. In Vercel production that loopback address is inside the Vercel runtime, not the CareerLaunch backend. Vercel blocks external rewrites whose destination resolves to a private address and returns `DNS_HOSTNAME_RESOLVED_PRIVATE`. Production builds now require `API_URL`, require HTTPS, and reject local, private, credential-bearing or path-bearing destinations.
 
-### 1. Create the Render API
+### 1. Create the Vercel backend project
 
-[`render.yaml`](render.yaml) is a safe Blueprint for the backend. Automatic deploys are disabled until you deliberately enable them. It installs only the server workspace, starts the Express service, and checks `/api/health`.
+In the Vercel dashboard, add a new project, import this repository again, select your personal Hobby scope, and set **Root Directory** to `server`. This is the card-free backend path. Leave framework detection enabled. With `server` as the project root, Vercel recognizes `src/index.js`, whose default export is the Express application. The same file starts a persistent listener only outside Vercel, so `npm run dev` and `npm start -w server` continue to work locally.
 
-Configure these Render variables during Blueprint creation:
+Configure these backend environment variables in Vercel Project Settings for Production. Add equivalent Preview values only if you intend to use the backend preview deployment:
 
 | Variable | Configuration |
 | --- | --- |
-| `NODE_ENV` | `production` (declared in the Blueprint) |
-| `HOST` | `0.0.0.0` (declared in the Blueprint) |
-| `PORT` | `10000` (declared in the Blueprint; the server reads `PORT`) |
-| `APP_ORIGIN` | Exact public Vercel frontend origin, using HTTPS and no trailing path |
-| `MONGODB_URI` | MongoDB connection string, entered only in Render's secret prompt |
-| `JWT_SECRET` | Generated securely by Render from the Blueprint |
+| `NODE_ENV` | `production` |
+| `APP_ORIGIN` | Exact public frontend Vercel origin, using HTTPS and no trailing path |
+| `MONGODB_URI` | MongoDB connection string, entered only in Vercel Project Settings |
+| `JWT_SECRET` | A cryptographically random value of at least 32 characters, entered only in Vercel Project Settings |
 
-Keep MongoDB network access restricted to the backend wherever your hosting plan permits. Do not seed demo users in production. After the service starts, verify its public `https://<service>.onrender.com/api/health` endpoint before changing Vercel.
+Do not add `PORT`, `HOST`, `VERCEL`, `DEMO_PASSWORD` or any secret to the repository. Vercel supplies its runtime flag automatically. Production refuses to start without MongoDB and a strong JWT secret, and never seeds demo users. The Mongo connection is cached for warm serverless invocations; a failed connection is cleared so a later invocation can retry. Configure Atlas network access and a least-privilege database user appropriately for Vercel, then deploy and verify `https://<backend-project>.vercel.app/api/health` before changing the frontend.
 
-### 2. Point Vercel at Render
+### 2. Point the frontend project at the backend
 
 Keep the Vercel project Root Directory set to `client`. Add this server-side environment variable to the Vercel Production environment:
 
 ```env
-API_URL=https://<service>.onrender.com
+API_URL=https://<backend-project>.vercel.app
 ```
 
-Use the public Render HTTPS origin only: do not include `/api`, credentials, a query string, localhost, a private IP or a Render private-network hostname. `API_URL` intentionally does not use the `NEXT_PUBLIC_` prefix because it is consumed by Next.js server configuration and does not need to be bundled into browser JavaScript.
+Use the backend project's public HTTPS origin only: do not include `/api`, credentials, a query string, localhost or a private hostname/IP. `API_URL` intentionally does not use the `NEXT_PUBLIC_` prefix because it is consumed by Next.js server configuration and does not need to be bundled into browser JavaScript.
 
-Vercel applies environment changes only to new deployments. After saving `API_URL`, create a new deployment and verify the Vercel `/api/health` route. If Preview deployments also use the Render API, their browser origins must be accounted for by the backend's origin policy; the default production configuration permits only the exact `APP_ORIGIN`.
+Vercel applies environment changes only to new deployments. After saving `API_URL`, redeploy the frontend and verify its `/api/health` route, public job loading, and both account roles. The backend permits state-changing requests only from the exact `APP_ORIGIN`. If you deploy previews, configure a deliberate matching frontend/backend origin pair rather than weakening that origin check.
+
+Vercel Hobby and MongoDB Atlas each have their own usage limits and may cold-start after inactivity. No card or provider-specific secret belongs in Git; manage all production values in the corresponding Vercel project.
 
 ### Other Node hosting
 

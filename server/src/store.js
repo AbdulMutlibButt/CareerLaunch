@@ -3,6 +3,45 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 mongoose.set("sanitizeFilter", true);
+const defaultMongoCache = (globalThis[Symbol.for("careerlaunch.mongo")] ??= {
+  connection: null,
+  promise: null,
+  uri: null,
+});
+
+export async function connectMongo(
+  uri,
+  {
+    cache = defaultMongoCache,
+    connector = (connectionUri) => mongoose.connect(connectionUri),
+  } = {},
+) {
+  if (cache.uri === uri && cache.connection?.connection?.readyState === 1)
+    return cache.connection;
+  if (cache.uri !== uri) {
+    cache.connection = null;
+    cache.promise = null;
+    cache.uri = uri;
+  }
+  if (!cache.promise)
+    cache.promise = Promise.resolve().then(() => connector(uri));
+  const pending = cache.promise;
+  try {
+    const connection = await pending;
+    if (cache.promise === pending && cache.uri === uri) {
+      cache.connection = connection;
+      cache.promise = null;
+    }
+    return connection;
+  } catch (error) {
+    if (cache.promise === pending) {
+      cache.connection = null;
+      cache.promise = null;
+      cache.uri = null;
+    }
+    throw error;
+  }
+}
 const definitions = {
   users: {
     name: String,
@@ -50,9 +89,10 @@ const definitions = {
 export async function createStore({
   uri = "",
   file = path.resolve("data/demo.json"),
+  disconnectOnClose = true,
 } = {}) {
   if (uri) {
-    await mongoose.connect(uri);
+    await connectMongo(uri);
     const models = {};
     for (const [name, fields] of Object.entries(definitions)) {
       const schema = new mongoose.Schema(
@@ -91,7 +131,8 @@ export async function createStore({
           .lean()
           .then((x) => safe(n, x)),
       remove: (n, q) => models[n].deleteMany(q),
-      close: () => mongoose.disconnect(),
+      close: () =>
+        disconnectOnClose ? mongoose.disconnect() : Promise.resolve(),
     };
   }
   let data = Object.fromEntries(Object.keys(definitions).map((n) => [n, []]));

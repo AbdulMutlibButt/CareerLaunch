@@ -3,26 +3,20 @@ import { createStore } from "./store.js";
 import { createApp } from "./app.js";
 import { seedDemo } from "./demo.js";
 import { loadConfig } from "./config.js";
+import { isVercelRuntime, startLocalServer } from "./listener.js";
 const config = loadConfig();
-const store = await createStore({ uri: config.mongoUri });
+const runningOnVercel = isVercelRuntime();
+const store = await createStore({
+  uri: config.mongoUri,
+  disconnectOnClose: !runningOnVercel,
+});
 if (store.mode === "local-demo")
   await seedDemo(store, { password: config.demoPassword });
-const server = createApp(store, {
+const app = createApp(store, {
   production: config.production,
   origin: config.origin,
   secret: config.jwtSecret,
-}).listen(
-  config.port,
-  config.host,
-  () =>
-    console.log(
-      `CareerLaunch API listening on ${config.host}:${config.port} (${store.mode})`,
-    ),
-);
-for (const signal of ["SIGINT", "SIGTERM"])
-  process.on(signal, () =>
-    server.close(async () => {
-      await store.close();
-      process.exit(0);
-    }),
-  );
+});
+
+export default app;
+startLocalServer(app, store, config);
