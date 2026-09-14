@@ -37,6 +37,8 @@ test("the Vercel entry exports Express without starting a listener", async () =>
     new URL("../src/index.js", import.meta.url),
     "utf8",
   );
+  assert.match(entry, /import express from "express"/);
+  assert.match(entry, /const app = configureApp\(\s*express\(\),\s*store,/);
   assert.match(entry, /const runningOnVercel = isVercelRuntime\(\)/);
   assert.match(entry, /export default app/);
   assert.match(entry, /startLocalServer\(app, store, config\)/);

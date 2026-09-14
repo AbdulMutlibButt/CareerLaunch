@@ -54,7 +54,12 @@ function fail(code, message) {
   e.status = code;
   throw e;
 }
-export function createApp(
+export function createApp(store, options) {
+  return configureApp(express(), store, options);
+}
+
+export function configureApp(
+  app,
   store,
   {
     secret = process.env.JWT_SECRET || randomBytes(48).toString("hex"),
@@ -62,7 +67,6 @@ export function createApp(
     origin = process.env.APP_ORIGIN || "http://127.0.0.1:3000",
   } = {},
 ) {
-  const app = express();
   if (production) app.set("trust proxy", 1);
   app.disable("x-powered-by");
   app.use(helmet());
